@@ -210,8 +210,11 @@ impl<'de> Deserialize<'de> for RangeMetadata {
 /// A bounded set (mathematical interval) over an orderable value type T.
 ///
 /// The storage type is a `Struct` with exactly two fields:
-/// - `lower` (type T, nullable): the lower bound. A null value means unbounded.
-/// - `upper` (type T, nullable): the upper bound. A null value means unbounded.
+/// - `lower` (type T): the lower bound. Each bound may independently be
+///   nullable or non-nullable. A nullable bound can hold null to represent an
+///   unbounded (infinite, exclusive) endpoint. A non-nullable bound is always
+///   finite.
+/// - `upper` (type T): the upper bound. Same nullability semantics as `lower`.
 ///
 /// Both fields must have the same data type T. The `closed` parameter specifies
 /// which endpoints are included.
@@ -241,7 +244,8 @@ impl From<RangeMetadata> for Range {
 /// Validates that `data_type` is an acceptable storage type for `arrow.range`.
 ///
 /// Checks that the data type is a struct with exactly two fields named
-/// "lower" and "upper", both nullable, and both sharing the same data type.
+/// "lower" and "upper", both sharing the same data type. Each bound may be
+/// nullable or non-nullable independently; nullability is not required.
 fn validate_storage(data_type: &DataType) -> Result<(), ArrowError> {
     let fields: &Fields = match data_type {
         DataType::Struct(fields) => fields,
@@ -274,18 +278,6 @@ fn validate_storage(data_type: &DataType) -> Result<(), ArrowError> {
             "Range data type mismatch, expected second field named \"upper\", found \"{}\"",
             upper.name()
         )));
-    }
-
-    if !lower.is_nullable() {
-        return Err(ArrowError::InvalidArgumentError(
-            "Range data type mismatch, \"lower\" field must be nullable".to_owned(),
-        ));
-    }
-
-    if !upper.is_nullable() {
-        return Err(ArrowError::InvalidArgumentError(
-            "Range data type mismatch, \"upper\" field must be nullable".to_owned(),
-        ));
     }
 
     if lower.data_type() != upper.data_type() {
@@ -496,8 +488,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Range data type mismatch, \"lower\" field must be nullable")]
-    fn invalid_storage_non_nullable_lower() {
+    fn accepts_non_nullable_lower() -> Result<(), ArrowError> {
         let range = Range::new(RangeClosed::Both);
         let storage = DataType::Struct(
             [
@@ -507,13 +498,14 @@ mod tests {
             .into_iter()
             .collect(),
         );
-        let field = Field::new("", storage, false);
-        field.with_extension_type(range);
+        let mut field = Field::new("", storage, false);
+        field.try_with_extension_type(range.clone())?;
+        assert_eq!(field.try_extension_type::<Range>()?, range);
+        Ok(())
     }
 
     #[test]
-    #[should_panic(expected = "Range data type mismatch, \"upper\" field must be nullable")]
-    fn invalid_storage_non_nullable_upper() {
+    fn accepts_non_nullable_upper() -> Result<(), ArrowError> {
         let range = Range::new(RangeClosed::Both);
         let storage = DataType::Struct(
             [
@@ -523,8 +515,27 @@ mod tests {
             .into_iter()
             .collect(),
         );
-        let field = Field::new("", storage, false);
-        field.with_extension_type(range);
+        let mut field = Field::new("", storage, false);
+        field.try_with_extension_type(range.clone())?;
+        assert_eq!(field.try_extension_type::<Range>()?, range);
+        Ok(())
+    }
+
+    #[test]
+    fn accepts_both_non_nullable() -> Result<(), ArrowError> {
+        let range = Range::new(RangeClosed::Both);
+        let storage = DataType::Struct(
+            [
+                Field::new("lower", DataType::Int32, false),
+                Field::new("upper", DataType::Int32, false),
+            ]
+            .into_iter()
+            .collect(),
+        );
+        let mut field = Field::new("", storage, false);
+        field.try_with_extension_type(range.clone())?;
+        assert_eq!(field.try_extension_type::<Range>()?, range);
+        Ok(())
     }
 
     #[test]
