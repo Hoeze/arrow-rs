@@ -33,6 +33,8 @@ mod json;
 pub use json::{Json, JsonMetadata};
 mod opaque;
 pub use opaque::{Opaque, OpaqueMetadata};
+mod range;
+pub use range::{Range, RangeClosed, RangeMetadata};
 mod timestamp_with_offset;
 pub use timestamp_with_offset::TimestampWithOffset;
 mod uuid;
@@ -75,6 +77,11 @@ pub enum CanonicalExtensionType {
     /// <https://arrow.apache.org/docs/format/CanonicalExtensions.html#opaque>
     Opaque(Opaque),
 
+    /// The extension type for `Range`.
+    ///
+    /// <https://arrow.apache.org/docs/format/CanonicalExtensions.html#range>
+    Range(Range),
+
     /// The extension type for `Bool8`.
     ///
     /// <https://arrow.apache.org/docs/format/CanonicalExtensions.html#bit-boolean>
@@ -103,6 +110,7 @@ impl TryFrom<&Field> for CanonicalExtensionType {
                 Json::NAME => value.try_extension_type::<Json>().map(Into::into),
                 Uuid::NAME => value.try_extension_type::<Uuid>().map(Into::into),
                 Opaque::NAME => value.try_extension_type::<Opaque>().map(Into::into),
+                Range::NAME => value.try_extension_type::<Range>().map(Into::into),
                 Bool8::NAME => value.try_extension_type::<Bool8>().map(Into::into),
                 TimestampWithOffset::NAME => value
                     .try_extension_type::<TimestampWithOffset>()
@@ -150,6 +158,12 @@ impl From<Uuid> for CanonicalExtensionType {
 impl From<Opaque> for CanonicalExtensionType {
     fn from(value: Opaque) -> Self {
         CanonicalExtensionType::Opaque(value)
+    }
+}
+
+impl From<Range> for CanonicalExtensionType {
+    fn from(value: Range) -> Self {
+        CanonicalExtensionType::Range(value)
     }
 }
 
